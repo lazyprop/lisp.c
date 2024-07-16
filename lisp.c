@@ -2,131 +2,71 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "util.h"
-
-typedef enum { LIST, ATOM } ExprType;
-
-struct LispExpr;
-
-typedef GENERIC_LIST(struct LispExpr*) LispList;
-
-typedef struct LispExpr {
-  ExprType type;
-  union {
-    LispList* list;
-    char* value;
-  } data;
-} LispExpr;
+#include "parser.h" // commented to avoid warnings
 
 
-void print_expr(LispExpr* e) {
-  void _print(LispExpr* e, int level) {
-    for (int i = 0; i < level; i++) {
-      printf("  ");
+#define PUSH(x) printf("push %s\n", x);
+#define POP(x) printf("pop %s\n", x);
+#define ADD(src, dst) printf("add %s, %s\n", src, dst);
+#define MUL(src) printf("mul %s\n", src);
+#define IMUL(src, dst) printf("mul %s, %s\n", src, dst);
+#define MOV(src, dst) printf("mov %s, %s\n", src, dst);
+#define MOVNUM(num, dst) printf("mov $%d, %s\n", num, dst);
+
+
+void add_num(int x, int y) {
+  MOVNUM(x, "%rax");
+  MOVNUM(y, "%rbx");
+  ADD("%rax", "%rbx");
+  PUSH("%rbx");
+}
+
+
+// generates code for expression e
+// pushes resulting value to the stack
+void compile(LispExpr* e) {
+  //printf("compiling\n");
+  //print_expr(e);
+  switch (e->type) {
+  case NUMBER:
+    printf("push $%d\n", (int) e->data.number);
+    return;
+  case SYMBOL:
+    return;
+  case LIST:
+    LispList* list = e->data.list;
+    compile(list->data[1]);
+    compile(list->data[2]);
+    POP("%rax");
+    POP("%rbx");
+    char* op = list->data[0]->data.symbol;
+    if (strcmp(op, "+") == 0) {
+      ADD("%rbx", "%rax");
+    } if (strcmp(op, "*") == 0) {
+      MUL("%rbx");
     }
-    switch (e->type) {
-    case LIST:
-      printf("<LIST %d>\n", e->data.list->size);
-      int n = e->data.list->size;
-      for (int j = 0; j < n; j++) {
-        _print(e->data.list->data[j], level+1);
-      }
-      printf("\n");
-      break;
-    case ATOM:
-      printf("<ATOM %s>\n", e->data.value);
-    }
+    PUSH("%rax");
   }
-  _print(e, 0);
-}
-
-GENERIC_LIST(char*)* tokenize(char* inp) {
-  GENERIC_LIST(char*)* tokens = malloc(sizeof(GENERIC_LIST(char*)));
-  LIST_INIT(tokens);
-  while (*inp != '\0') {
-    switch (*inp) {
-    case '(':
-      LIST_APPEND(tokens, "(");
-      inp++;
-      break;
-    case ')':
-      LIST_APPEND(tokens, ")");
-      inp++;
-      break;
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\r':
-      inp++;
-      break;
-    default:
-      GENERIC_LIST(char) str = LIST_DEFAULT(char);
-      while (*inp != '\0' && !strchr("() \t\n\r", *inp)) {
-        LIST_APPEND(&str, *inp);
-        inp++;
-      }
-      char* tmp = malloc(str.size * sizeof(char));
-      strncpy(tmp, str.data, str.size);
-      LIST_APPEND(tokens, tmp);
-    }
-  }
-  return tokens;
-}
-
-LispExpr* make_atom(char* val) {
-  LispExpr* e = malloc(sizeof(LispExpr));
-  e->type = ATOM;
-  e->data.value = val;
-  return e;
-}
-
-LispExpr* make_list() {
-  LispExpr* e = malloc(sizeof(LispExpr));
-  e->type = LIST;
-  e->data.list = malloc(sizeof(LispList));
-  LIST_INIT(e->data.list);
-  return e;
-}
-
-LispExpr* parse(GENERIC_LIST(char*)* tokens) {
-  int idx = 0;
-  LispExpr* _parse() {
-    for (; idx < tokens->size; idx++) {
-      char* tok = tokens->data[idx];
-      if (strcmp(tok, "(") == 0) {
-        LispExpr* e = make_list();
-        LispList* list = e->data.list;
-        for (idx++; idx < tokens->size; idx++) {
-          LispExpr* tmp = _parse();
-          if (!tmp) break;
-          LIST_APPEND(list, tmp);
-        }
-        return e;
-      }
-      else if (strcmp(tok, ")") == 0) return NULL;
-      else {
-        return make_atom(tok);
-      }
-    }
-  }
-  return _parse();
 }
 
 int main() {
-  char* inp = "(* (+ 1 2) (+ 3 4))";
+  char* header =
+    ".section .text\n"
+    ".global main\n"
+    "main:\n";
+
+  printf("%s\n", header);
+
+
+  char* inp = "(* (+ 7 (* 3 3)) (+ 3 4))";
   GENERIC_LIST(char*)* tokens = tokenize(inp);
+  LispExpr* e = parse(tokens);
 
-  for (int i = 0; i < tokens->size; i++) {
-    printf("%s\n", tokens->data[i]);
-  }
+  compile(e);
+  POP("%rax");
 
-  LispExpr* expr = parse(tokens);
-  if (expr == NULL) {
-    printf("error parsing\n");
-    return 1;
-  }
-
-  printf("%d\n", expr->type);
-  print_expr(expr);
+  printf("ret\n");
 }
