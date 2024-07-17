@@ -7,5 +7,5 @@ lisp: lisp.c util.h
 
 asm: lisp
 	./lisp > out.s
-	gcc out.s
+	gcc driver.c out.s
 	./a.out

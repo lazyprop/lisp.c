@@ -42,68 +42,79 @@ void test_list() {
   printf("\n");
 }
   
-typedef enum { LIST, NUMBER, SYMBOL } ExprType;
-
-struct LispExpr;
-
-typedef GENERIC_LIST(struct LispExpr*) LispList;
-
-typedef struct LispExpr {
-  ExprType type;
-  union {
-    LispList* list;
-    char* symbol;
-    float number;
-  } data;
-} LispExpr;
 
 
-void print_expr(LispExpr* e) {
-  void _print(LispExpr* e, int level) {
-    for (int i = 0; i < level; i++) {
-      printf("  ");
+const int M = 1e5;
+
+long long ipow(int base, int exp) {
+  long long res = 1;
+  while (1) {
+    if (exp % 2) {
+      res *= base;
     }
-    switch (e->type) {
-    case LIST:
-      printf("<LIST %d>\n", e->data.list->size);
-      int n = e->data.list->size;
-      for (int j = 0; j < n; j++) {
-        _print(e->data.list->data[j], level+1);
-      }
-      printf("\n");
-      break;
-    case SYMBOL:
-      printf("<SYMBOL %s>\n", e->data.symbol);
-      break;
-    case NUMBER:
-      printf("<NUMBER %.1f>\n", e->data.number);
+    exp /= 2;
+    if (!exp) {
       break;
     }
+    base *= base;
+    base %= M;
   }
-  _print(e, 0);
+  return res;
 }
 
-LispExpr* make_symbol(char* val) {
-  LispExpr* e = malloc(sizeof(LispExpr));
-  e->type = SYMBOL;
-  e->data.symbol = val;
-  return e;
-}
-
-LispExpr* make_number(float val) {
-  LispExpr* e = malloc(sizeof(LispExpr));
-  e->type = NUMBER;
-  e->data.number = val;
-  return e;
-}
-
-LispExpr* make_list() {
-  LispExpr* e = malloc(sizeof(LispExpr));
-  e->type = LIST;
-  e->data.list = malloc(sizeof(LispList));
-  LIST_INIT(e->data.list);
-  return e;
+int hash(const char* str) {
+  const int P = 37;
+  long long hash = 0;
+  for (int i = 0; i < strlen(str); i++) {
+    hash += str[i] * ipow(P, i);
+    hash %= M;
+  }
+  return (int) hash;
 }
 
 
+typedef struct ht_entry {
+  const char* key;
+  int val;
+  struct ht_entry* next;
+} ht_entry;
+
+typedef struct {
+  ht_entry** entries;
+} hashtable;
+
+hashtable* ht_new() {
+  hashtable* ht = malloc(sizeof(hashtable));
+  ht->entries = malloc(M * sizeof(ht_entry*));
+  memset(ht->entries, 0, M * sizeof(ht_entry*));
+  return ht;
+}
+
+
+void ht_set(hashtable* ht, const char* key, const int val) {
+  int hashed = hash(key);
+  ht_entry* cur = ht->entries[hashed];
+  if (!cur) {
+    ht->entries[hashed] = malloc(sizeof(ht_entry*));
+    ht->entries[hashed]->key = key;
+    ht->entries[hashed]->val = val;
+    return;
+  }
+
+  while (!cur->next) {
+    cur = cur->next;
+  }
+  cur->next = malloc(sizeof(ht_entry));
+  cur->next->key = key;
+  cur->next->val = val;
+}
+
+ht_entry* ht_get(hashtable* ht, const char* key) {
+  int hashed = hash(key);
+  ht_entry* cur = ht->entries[hashed];
+  while (cur && strcmp(key, cur->key)) {
+    cur = cur->next;
+  }
+  return cur;
+}
 #endif
