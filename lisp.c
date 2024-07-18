@@ -44,7 +44,7 @@ int compute_offset(LispExpr* e) {
 // pushes resulting value to the stack
 void compile(LispExpr* e) {
   hashtable* offsets = ht_new();
-  int offset = 0;
+  int offset = 0, ifcount = 0;
 
   void _compile(LispExpr* e) {
     switch (e->type) {
@@ -90,6 +90,24 @@ void compile(LispExpr* e) {
           _compile(body);
         }
 
+        else if (!strcmp(op->data.symbol, "if")) {
+          assert(list->size == 4);
+          LispExpr* cond = list->data[1];
+          LispExpr* if_body = list->data[2];
+          LispExpr* else_body = list->data[3];
+
+          _compile(cond);
+          POP("%rax");
+          printf("test %rax, %rax\n");
+          printf("jz else_%d\n", ifcount);
+          _compile(if_body);
+          printf("jmp else_%d_end\n", ifcount);
+
+          printf("else_%d:\n", ifcount);
+          _compile(else_body);
+          printf("else_%d_end:\n", ifcount);
+          ifcount++;
+        }
 
         else {
           _compile(list->data[1]);
@@ -99,9 +117,16 @@ void compile(LispExpr* e) {
 
           if (strcmp(op->data.symbol, "+") == 0) {
             ADD("%rbx", "%rax");
-          } if (strcmp(op->data.symbol, "*") == 0) {
+          } else if (strcmp(op->data.symbol, "*") == 0) {
             MUL("%rbx");
+          } else if (strcmp(op->data.symbol, "eq?") == 0) {
+            MOV("$0", "%rdi");
+            printf("cmp %%rax, %%rbx\n");
+            printf("mov $1, %%rsi\n");
+            printf("cmovz %%rsi, %%rdi\n");
+            MOV("%rdi", "%rax");
           }
+          
           PUSH("%rax");
         }
       }
@@ -117,10 +142,9 @@ void compile(LispExpr* e) {
   _compile(e);
 
   
+  POP("%rax");
   MOV("%rbp", "%rsp");
   POP("%rbp");
-
-
 }
 
 
@@ -135,6 +159,8 @@ int main() {
 
   char* arith_expr = "(* (+ 7 (* x 3)) (+ 3 4))";
   char* let_expr = "(let ((x 10) (y 7) (z 4)) (* (+ y (* x 3)) (+ 3 z))";
+  char* if_expr = "(let ((x 0)) (if (eq? x 1) 10 20))";
+
   GENERIC_LIST(char*)* tokens = tokenize(let_expr);
 
   LispExpr* e = parse(tokens);
