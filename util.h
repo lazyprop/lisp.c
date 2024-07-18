@@ -2,10 +2,11 @@
 #define UTIL_H
 
 
+#define INITIAL_SIZE 64
 #define GENERIC_LIST(t) struct { int size; int capacity; t* data;  }
-#define LIST_DEFAULT(t) { 0, 32, malloc(32 * sizeof(t)) }
-#define LIST_INIT(l) (l)->size = 0; (l)->capacity = 32; \
-  (l)->data = malloc(32 * sizeof l->data);
+#define LIST_DEFAULT(t) { 0, INITIAL_SIZE, malloc(INITIAL_SIZE * sizeof(t)) }
+#define LIST_INIT(l) (l)->size = 0; (l)->capacity = INITIAL_SIZE; \
+  (l)->data = malloc(INITIAL_SIZE * sizeof l->data);
 #define LIST_APPEND(l, val)     \
   if ((l)->size == (l)->capacity) \
     (l)->data = reallocarray((l)->data, (l)->capacity *= 2, sizeof val); \
