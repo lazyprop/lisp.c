@@ -11,7 +11,7 @@
 
 #include "util.h"
 
-typedef enum { LIST, NUMBER, SYMBOL } ExprType;
+typedef enum { LIST, NUMBER, SYMBOL, CONS } ExprType;
 
 struct LispExpr;
 
@@ -23,6 +23,7 @@ typedef struct LispExpr {
     LispList* list;
     char* symbol;
     float number;
+    struct { struct LispExpr* first; struct ListExpr* second } cons;
   } data;
 } LispExpr;
 
@@ -30,22 +31,27 @@ typedef struct LispExpr {
 void print_expr(LispExpr* e) {
   void _print(LispExpr* e, int level) {
     for (int i = 0; i < level; i++) {
-      printf("  ");
+      fprintf(stderr, "  ");
     }
     switch (e->type) {
     case LIST:
-      printf("<LIST %d>\n", e->data.list->size);
+      fprintf(stderr, "<LIST %d>\n", e->data.list->size);
       int n = e->data.list->size;
       for (int j = 0; j < n; j++) {
         _print(e->data.list->data[j], level+1);
       }
-      printf("\n");
+      fprintf(stderr, "\n");
       break;
     case SYMBOL:
-      printf("<SYMBOL %s>\n", e->data.symbol);
+      fprintf(stderr, "<SYMBOL %s>\n", e->data.symbol);
       break;
     case NUMBER:
-      printf("<NUMBER %.1f>\n", e->data.number);
+      fprintf(stderr, "<NUMBER %.1f>\n", e->data.number);
+      break;
+    case CONS:
+      fprintf(stderr, "<CONS>\n");
+      _print(e->data.cons.first, level+1);
+      _print(e->data.cons.second, level+1);
       break;
     }
   }
@@ -71,6 +77,15 @@ LispExpr* make_list() {
   e->type = LIST;
   e->data.list = malloc(sizeof(LispList));
   LIST_INIT(e->data.list);
+  return e;
+}
+
+
+LispExpr* make_cons(LispExpr* first, LispExpr* second) {
+  LispExpr* e = malloc(sizeof(LispExpr));
+  e->type = CONS;
+  e->data.cons.first = first;
+  e->data.cons.second = second;
   return e;
 }
 
@@ -114,6 +129,15 @@ LispExpr* parse(GENERIC_LIST(char*)* tokens) {
     for (; idx < tokens->size; idx++) {
       char* tok = tokens->data[idx];
       if (strcmp(tok, "(") == 0) {
+        if (!strcmp(tokens->data[idx+1], "cons")) {
+          idx += 2;
+          LispExpr* first = _parse();
+          idx++;
+          LispExpr* second = _parse();
+          idx++;
+          return make_cons(first, second);
+        }
+
         LispExpr* e = make_list();
         LispList* list = e->data.list;
         for (idx++; idx < tokens->size; idx++) {

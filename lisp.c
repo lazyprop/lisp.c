@@ -60,6 +60,23 @@ void compile(LispExpr* e) {
       PUSH("%rax");
 
       break;;
+
+    case CONS:
+      fprintf(stderr, "CONS\n");
+      LispExpr* first = e->data.cons.first;
+      LispExpr* second = e->data.cons.second;
+      _compile(first);
+      _compile(second);
+      
+      MOVNUM(32, "%rdi");
+      printf("call malloc\n");
+      POP("%rcx");
+      POP("%rbx");
+      MOV("%rbx", "(%rax)");
+      MOV("%rcx", "8(%rax)");
+      PUSH("%rax");
+      break;
+      
       
     case LIST:
       LispList* list = e->data.list;
@@ -107,6 +124,24 @@ void compile(LispExpr* e) {
           _compile(else_body);
           printf("else_%d_end:\n", ifcount);
           ifcount++;
+        }
+
+        else if (!strcmp(op->data.symbol, "car")) {
+          assert(list->size == 2);
+          LispExpr* cons = list->data[1];
+          _compile(cons);
+          POP("%rbx");
+          MOV("(%rbx)", "%rax");
+          PUSH("%rax");
+        }
+
+        else if (!strcmp(op->data.symbol, "cdr")) {
+          assert(list->size == 2);
+          LispExpr* cons = list->data[1];
+          _compile(cons);
+          POP("%rbx");
+          MOV("8(%rbx)", "%rax");
+          PUSH("%rax");
         }
 
         else {
@@ -160,11 +195,14 @@ int main() {
   char* arith_expr = "(* (+ 7 (* x 3)) (+ 3 4))";
   char* let_expr = "(let ((x 10) (y 7) (z 4)) (* (+ y (* x 3)) (+ 3 z))";
   char* if_expr = "(let ((x 0)) (if (eq? x 1) 10 20))";
+  char* cons_expr = "(car (cdr (cons 100 (cons 200 300))))";
 
-  GENERIC_LIST(char*)* tokens = tokenize(let_expr);
+  GENERIC_LIST(char*)* tokens = tokenize(cons_expr);
 
   LispExpr* e = parse(tokens);
   fprintf(stderr, "total offset: %d\n", compute_offset(e));
+
+  print_expr(e);
 
   compile(e);
 

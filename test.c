@@ -1,8 +1,15 @@
-int f() {
-  int x = 10, y = 15;
-  return x + y;
-}
+#include <stdlib.h>
 
 int main() {
-  f();
+  int* a = malloc(sizeof(int) * 2);
+  a[0] = 5;
+  a[1] = 10;
+
+  int b[2];
+  b[0] = 15;
+  b[1] = 20;
+
+  int* x = a;
+
+  int y = a[1];
 }
