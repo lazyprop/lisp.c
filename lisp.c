@@ -133,7 +133,6 @@ int main() {
 
   printf("%s\n", header);
 
-
   char* arith_expr = "(* (+ 7 (* x 3)) (+ 3 4))";
   char* let_expr = "(let ((x 10) (y 7) (z 4)) (* (+ y (* x 3)) (+ 3 z))";
   GENERIC_LIST(char*)* tokens = tokenize(let_expr);
