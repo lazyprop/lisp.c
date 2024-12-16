@@ -1,49 +1,74 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdlib.h>
 
+/*
 #define INITIAL_SIZE 32
 #define GENERIC_LIST(t) struct { int size; int capacity; t* data;  }
 #define LIST_DEFAULT(t) { 0, INITIAL_SIZE, malloc(INITIAL_SIZE * sizeof(t)) }
 #define LIST_INIT(l) (l)->size = 0; (l)->capacity = INITIAL_SIZE; \
-  (l)->data = malloc(INITIAL_SIZE * sizeof l->data);
+  (l)->data = malloc(INITIAL_SIZE * sizeof (l)->data);
 #define LIST_APPEND(l, val)     \
   if ((l)->size == (l)->capacity) \
     (l)->data = reallocarray((l)->data, (l)->capacity *= 2, sizeof (l)->data); \
   (l)->data[(l)->size++] = val;
 #define LIST_DESTROY(l) free((l)->data); free((l));
+*/
 
+#define INITIAL_SIZE 32
 
+#define GENERIC_LIST(t) struct { int size; int capacity; t* data; }
+
+#define LIST_DEFAULT(t) { 0, INITIAL_SIZE, malloc(INITIAL_SIZE * sizeof(t)) }
+
+#define LIST_INIT(l, t) (l)->size = 0; (l)->capacity = INITIAL_SIZE; \
+  (l)->data = malloc(INITIAL_SIZE * sizeof(t));
+
+#define LIST_APPEND(l, t, val)     \
+  if ((l)->size == (l)->capacity) \
+    (l)->data = realloc((l)->data, (l)->capacity *= 2 * sizeof(t)); \
+  (l)->data[(l)->size++] = val;
+
+#define LIST_DESTROY(l) free((l)->data); free((l));
 void test_list() {
-  GENERIC_LIST(char) str = LIST_DEFAULT(char*);
-  LIST_APPEND(&str, 'a');
-  LIST_APPEND(&str, 'b');
+  GENERIC_LIST(char*) str = LIST_DEFAULT(char*);
+  char *a = "a";  // Allocate a char* instead of just 'a'
+  char *b = "b";  // Similarly for 'b'
+  LIST_APPEND(&str, char*, a);
+  LIST_APPEND(&str, char*, b);
   printf("%d\n", str.size);
   for (int i = 0; i < str.size; i++) {
-    printf("%c ", str.data[i]);
+    printf("%s ", str.data[i]);
   }
   printf("\n");
-  LIST_APPEND(&str, 'c');
+  char *c = "c";  // Similarly for 'c'
+  LIST_APPEND(&str, char*, c);
   printf("%d\n", str.capacity);
   printf("%d\n", str.size);
   for (int i = 0; i < str.size; i++) {
-    printf("%c ", str.data[i]);
+    printf("%s ", str.data[i]);
   }
   printf("\n");
 
   GENERIC_LIST(int) list = LIST_DEFAULT(int);
-  LIST_APPEND(&list, 1);
-  LIST_APPEND(&list, 2);
-  LIST_APPEND(&list, 3);
-  LIST_APPEND(&list, 4);
-  LIST_APPEND(&list, 5);
+  LIST_APPEND(&list, int, 1);
+  LIST_APPEND(&list, int, 2);
+  LIST_APPEND(&list, int, 3);
+  LIST_APPEND(&list, int, 4);
+  LIST_APPEND(&list, int, 5);
   for (int i = 0; i < list.size; i++) {
     printf("%d ", list.data[i]);
   }
   printf("\n");
 }
-  
 
+
+typedef struct {
+  int size;
+  int capacity;
+  char** data;
+} CharList;
 
 const int M = 1e5;
 
@@ -118,4 +143,6 @@ ht_entry* ht_get(hashtable* ht, const char* key) {
   }
   return cur;
 }
+
+
 #endif

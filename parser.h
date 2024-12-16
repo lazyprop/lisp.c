@@ -23,7 +23,7 @@ typedef struct LispExpr {
     LispList* list;
     char* symbol;
     float number;
-    struct { struct LispExpr* first; struct ListExpr* second } cons;
+    struct { struct LispExpr* first; struct LispExpr* second } cons;
   } data;
 } LispExpr;
 
@@ -76,7 +76,7 @@ LispExpr* make_list() {
   LispExpr* e = malloc(sizeof(LispExpr));
   e->type = LIST;
   e->data.list = malloc(sizeof(LispList));
-  LIST_INIT(e->data.list);
+  LIST_INIT(e->data.list, struct LispExpr*);
   return e;
 }
 
@@ -90,17 +90,18 @@ LispExpr* make_cons(LispExpr* first, LispExpr* second) {
 }
 
 
-GENERIC_LIST(char*)* tokenize(char* inp) {
-  GENERIC_LIST(char*)* tokens = malloc(sizeof(GENERIC_LIST(char*)));
-  LIST_INIT(tokens);
+CharList* tokenize(char* inp) {
+  CharList* tokens = malloc(sizeof(CharList));
+  LIST_INIT(tokens, char*);
+  
   while (*inp != '\0') {
     switch (*inp) {
     case '(':
-      LIST_APPEND(tokens, "(");
+      LIST_APPEND(tokens, char*, "(");
       inp++;
       break;
     case ')':
-      LIST_APPEND(tokens, ")");
+      LIST_APPEND(tokens, char*, ")");
       inp++;
       break;
     case ' ':
@@ -112,18 +113,19 @@ GENERIC_LIST(char*)* tokenize(char* inp) {
     default:
       GENERIC_LIST(char) str = LIST_DEFAULT(char);
       while (*inp != '\0' && !strchr("() \t\n\r", *inp)) {
-        LIST_APPEND(&str, *inp);
+        LIST_APPEND(&str, char, *inp);
         inp++;
       }
       char* tmp = malloc(str.size * sizeof(char));
       strncpy(tmp, str.data, str.size);
-      LIST_APPEND(tokens, tmp);
+      LIST_APPEND(tokens, char*, tmp);
     }
   }
   return tokens;
 }
 
-LispExpr* parse(GENERIC_LIST(char*)* tokens) {
+
+LispExpr* parse(CharList* tokens) {
   int idx = 0;
   LispExpr* _parse() {
     for (; idx < tokens->size; idx++) {
@@ -143,7 +145,7 @@ LispExpr* parse(GENERIC_LIST(char*)* tokens) {
         for (idx++; idx < tokens->size; idx++) {
           LispExpr* tmp = _parse();
           if (!tmp) break;
-          LIST_APPEND(list, tmp);
+          LIST_APPEND(list, struct LispExpr*, tmp);
         }
         return e;
       }

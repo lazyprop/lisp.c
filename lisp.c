@@ -197,7 +197,7 @@ int main() {
   char* if_expr = "(let ((x 0)) (if (eq? x 1) 10 20))";
   char* cons_expr = "(car (cdr (cons 100 (cons 200 300))))";
 
-  GENERIC_LIST(char*)* tokens = tokenize(cons_expr);
+  CharList* tokens = tokenize(cons_expr);
 
   LispExpr* e = parse(tokens);
   fprintf(stderr, "total offset: %d\n", compute_offset(e));
