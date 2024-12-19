@@ -11,11 +11,13 @@
 
 #include "util.h"
 
-typedef enum { LIST, NUMBER, SYMBOL, CONS } ExprType;
+typedef enum { LIST, NUMBER, SYMBOL, CONS, FUNCTION } ExprType;
 
 struct LispExpr;
 
 typedef GENERIC_LIST(struct LispExpr*) LispList;
+
+struct LispFunc;
 
 typedef struct LispExpr {
   ExprType type;
@@ -23,10 +25,16 @@ typedef struct LispExpr {
     LispList* list;
     char* symbol;
     float number;
-    struct { struct LispExpr* first; struct LispExpr* second } cons;
+    struct { struct LispExpr* first; struct LispExpr* second; } cons;
+    struct LispFunc* func;
   } data;
 } LispExpr;
 
+typedef struct LispFunc {
+  char* name;
+  CharList* params;
+  LispExpr* body;
+} LispFunc;
 
 void print_expr(LispExpr* e) {
   void _print(LispExpr* e, int level) {
@@ -89,11 +97,20 @@ LispExpr* make_cons(LispExpr* first, LispExpr* second) {
   return e;
 }
 
+LispExpr* make_func(char* name, CharList* params, LispExpr* body) {
+  LispExpr* e = malloc(sizeof(LispExpr));
+  e->type = FUNCTION;
+  e->data.func = malloc(sizeof(LispFunc));
+  e->data.func->name = name;
+  e->data.func->params = params;
+  e->data.func->body = body;
+  return e;
+}
 
 CharList* tokenize(char* inp) {
   CharList* tokens = malloc(sizeof(CharList));
   LIST_INIT(tokens, char*);
-  
+
   while (*inp != '\0') {
     switch (*inp) {
     case '(':
@@ -112,12 +129,18 @@ CharList* tokenize(char* inp) {
       break;
     default:
       GENERIC_LIST(char) str = LIST_DEFAULT(char);
+      // Handle negative numbers by including '-' as part of the number
+      if (*inp == '-' && isdigit(*(inp + 1))) {
+        LIST_APPEND(&str, char, *inp);
+        inp++;
+      }
       while (*inp != '\0' && !strchr("() \t\n\r", *inp)) {
         LIST_APPEND(&str, char, *inp);
         inp++;
       }
-      char* tmp = malloc(str.size * sizeof(char));
+      char* tmp = malloc(str.size + 1);  // +1 for null terminator
       strncpy(tmp, str.data, str.size);
+      tmp[str.size] = '\0';  // Null terminate the string
       LIST_APPEND(tokens, char*, tmp);
     }
   }
@@ -125,45 +148,60 @@ CharList* tokenize(char* inp) {
 }
 
 
+static LispExpr* parse_expr(CharList* tokens, int* idx);
+
 LispExpr* parse(CharList* tokens) {
   int idx = 0;
-  LispExpr* _parse() {
-    for (; idx < tokens->size; idx++) {
-      char* tok = tokens->data[idx];
-      if (strcmp(tok, "(") == 0) {
-        if (!strcmp(tokens->data[idx+1], "cons")) {
-          idx += 2;
-          LispExpr* first = _parse();
-          idx++;
-          LispExpr* second = _parse();
-          idx++;
-          return make_cons(first, second);
-        }
+  return parse_expr(tokens, &idx);
+}
 
+static LispExpr* parse_expr(CharList* tokens, int* idx) {
+  for (; *idx < tokens->size; (*idx)++) {
+    char* tok = tokens->data[*idx];
+    if (strcmp(tok, "(") == 0) {
+      if (*idx + 1 < tokens->size && strcmp(tokens->data[*idx + 1], "define") == 0) {
+        (*idx) += 2;  // Skip past '(' and 'define'
+        if (strcmp(tokens->data[*idx], "(") == 0) {
+          (*idx)++;  // Skip past the opening paren of function name and params
+          char* fname = tokens->data[(*idx)++];  // Get function name
+
+          CharList* params = malloc(sizeof(CharList));
+          LIST_INIT(params, char*);
+
+          while (*idx < tokens->size && strcmp(tokens->data[*idx], ")") != 0) {
+            LIST_APPEND(params, char*, tokens->data[(*idx)++]);
+          }
+          (*idx)++;  // Skip past closing paren of params
+
+          LispExpr* body = parse_expr(tokens, idx);
+          (*idx)++;  // Skip past closing paren of define
+
+          return make_func(fname, params, body);
+        }
+      } else {
         LispExpr* e = make_list();
         LispList* list = e->data.list;
-        for (idx++; idx < tokens->size; idx++) {
-          LispExpr* tmp = _parse();
+        for ((*idx)++; *idx < tokens->size; (*idx)++) {
+          LispExpr* tmp = parse_expr(tokens, idx);
           if (!tmp) break;
           LIST_APPEND(list, struct LispExpr*, tmp);
         }
         return e;
       }
-      else if (strcmp(tok, ")") == 0) return NULL;
-      else {
-        int is_num = true;
-        for (char* it = tok; *it != '\0'; it++) {
-          if (!isdigit(*it)) {
-            is_num = false;
-            break;
-          }
-        }
-        if (is_num) return make_number(atoi(tok));
-        return make_symbol(tok);
+    }
+    else if (strcmp(tok, ")") == 0) return NULL;
+    else {
+      // Modified number checking to handle negative numbers
+      char* endptr;
+      float num = strtof(tok, &endptr);
+      if (*endptr == '\0' || (tok[0] == '-' && isdigit(tok[1]))) {
+        return make_number(num);
       }
+      return make_symbol(tok);
     }
   }
-  return _parse();
+  return NULL;
 }
+
 
 #endif
