@@ -5,7 +5,7 @@ all: lisp
 lisp: lisp.c util.h
 	gcc $(CFLAGS) lisp.c -o lisp
 
-asm: lisp
-	./lisp > out.s
-	gcc driver.c out.s
+test: lisp
+	./lisp test.scm -o out.s
+	gcc driver.c out.s -o a.out
 	./a.out

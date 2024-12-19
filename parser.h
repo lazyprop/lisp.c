@@ -10,61 +10,9 @@
 #include <ctype.h>
 
 #include "util.h"
+#include "types.h"
 
-typedef enum { LIST, NUMBER, SYMBOL, CONS, FUNCTION } ExprType;
 
-struct LispExpr;
-
-typedef GENERIC_LIST(struct LispExpr*) LispList;
-
-struct LispFunc;
-
-typedef struct LispExpr {
-  ExprType type;
-  union {
-    LispList* list;
-    char* symbol;
-    float number;
-    struct { struct LispExpr* first; struct LispExpr* second; } cons;
-    struct LispFunc* func;
-  } data;
-} LispExpr;
-
-typedef struct LispFunc {
-  char* name;
-  CharList* params;
-  LispExpr* body;
-} LispFunc;
-
-void print_expr(LispExpr* e) {
-  void _print(LispExpr* e, int level) {
-    for (int i = 0; i < level; i++) {
-      fprintf(stderr, "  ");
-    }
-    switch (e->type) {
-    case LIST:
-      fprintf(stderr, "<LIST %d>\n", e->data.list->size);
-      int n = e->data.list->size;
-      for (int j = 0; j < n; j++) {
-        _print(e->data.list->data[j], level+1);
-      }
-      fprintf(stderr, "\n");
-      break;
-    case SYMBOL:
-      fprintf(stderr, "<SYMBOL %s>\n", e->data.symbol);
-      break;
-    case NUMBER:
-      fprintf(stderr, "<NUMBER %.1f>\n", e->data.number);
-      break;
-    case CONS:
-      fprintf(stderr, "<CONS>\n");
-      _print(e->data.cons.first, level+1);
-      _print(e->data.cons.second, level+1);
-      break;
-    }
-  }
-  _print(e, 0);
-}
 
 LispExpr* make_symbol(char* val) {
   LispExpr* e = malloc(sizeof(LispExpr));
@@ -108,46 +56,54 @@ LispExpr* make_func(char* name, CharList* params, LispExpr* body) {
 }
 
 CharList* tokenize(char* inp) {
-  CharList* tokens = malloc(sizeof(CharList));
-  LIST_INIT(tokens, char*);
+    CharList* tokens = malloc(sizeof(CharList));
+    LIST_INIT(tokens, char*);
 
-  while (*inp != '\0') {
-    switch (*inp) {
-    case '(':
-      LIST_APPEND(tokens, char*, "(");
-      inp++;
-      break;
-    case ')':
-      LIST_APPEND(tokens, char*, ")");
-      inp++;
-      break;
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\r':
-      inp++;
-      break;
-    default:
-      GENERIC_LIST(char) str = LIST_DEFAULT(char);
-      // Handle negative numbers by including '-' as part of the number
-      if (*inp == '-' && isdigit(*(inp + 1))) {
-        LIST_APPEND(&str, char, *inp);
-        inp++;
-      }
-      while (*inp != '\0' && !strchr("() \t\n\r", *inp)) {
-        LIST_APPEND(&str, char, *inp);
-        inp++;
-      }
-      char* tmp = malloc(str.size + 1);  // +1 for null terminator
-      strncpy(tmp, str.data, str.size);
-      tmp[str.size] = '\0';  // Null terminate the string
-      LIST_APPEND(tokens, char*, tmp);
+    while (*inp != '\0') {
+        switch (*inp) {
+        case '(':
+            LIST_APPEND(tokens, char*, strdup("("));
+            inp++;
+            break;
+        case ')':
+            LIST_APPEND(tokens, char*, strdup(")"));
+            inp++;
+            break;
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\r':
+            inp++;
+            break;
+        default: {
+            // Collect the token
+            int len = 0;
+            char buf[1024];  // Safe buffer for token collection
+
+            // Collect characters until we hit a delimiter
+            while (*inp && !strchr("() \t\n\r", *inp)) {
+                buf[len++] = *inp++;
+            }
+            buf[len] = '\0';
+
+            // Check if it's a number
+            if (isdigit(buf[0]) || (buf[0] == '-' && isdigit(buf[1]))) {
+                char* endptr;
+                strtof(buf, &endptr);
+                if (*endptr == '\0') {  // Valid number
+                    LIST_APPEND(tokens, char*, strdup(buf));
+                    continue;
+                }
+            }
+
+            // Not a number, treat as symbol
+            LIST_APPEND(tokens, char*, strdup(buf));
+            break;
+        }
+        }
     }
-  }
-  return tokens;
+    return tokens;
 }
-
-
 static LispExpr* parse_expr(CharList* tokens, int* idx);
 
 LispExpr* parse(CharList* tokens) {

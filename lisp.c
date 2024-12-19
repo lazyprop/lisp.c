@@ -6,34 +6,40 @@
 
 #include "util.h"
 #include "parser.h"
+#include "types.h"
 
 typedef struct CompilerContext {
   hashtable* functions;
   int label_counter;
   bool debug_mode;
+  FILE* output;
 } CompilerContext;
 
 void compile_function(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* offset);
 void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* offset);
 
-#define PUSH(x) printf("push %s\n", x);
-#define POP(x) printf("pop %s\n", x);
-#define ADD(src, dst) printf("add %s, %s\n", src, dst);
-#define MUL(src) printf("mul %s\n", src);
-#define IMUL(src, dst) printf("mul %s, %s\n", src, dst);
-#define MOV(src, dst) printf("movq %s, %s\n", src, dst);
-#define MOVNUM(num, dst) printf("movq $%d, %s\n", num, dst);
+#define PUSH(x) fprintf(ctx->output, "push %s\n", x)
+#define POP(x) fprintf(ctx->output, "pop %s\n", x)
+#define ADD(src, dst) fprintf(ctx->output, "add %s, %s\n", src, dst)
+#define MUL(src) fprintf(ctx->output, "mul %s\n", src)
+#define IMUL(src, dst) fprintf(ctx->output, "mul %s, %s\n", src, dst)
+#define MOV(src, dst) fprintf(ctx->output, "movq %s, %s\n", src, dst)
+#define MOVNUM(num, dst) fprintf(ctx->output, "movq $%d, %s\n", num, dst)
 
-CompilerContext* init_compiler(void) {
+CompilerContext* init_compiler(FILE* output) {
   CompilerContext* ctx = malloc(sizeof(CompilerContext));
   ctx->functions = ht_new();
   ctx->label_counter = 0;
   ctx->debug_mode = true;
+  ctx->output = output;
   return ctx;
 }
 
 void free_compiler(CompilerContext* ctx) {
   ht_free(ctx->functions);
+  if (ctx->output != stdout) {
+    fclose(ctx->output);
+  }
   free(ctx);
 }
 
@@ -74,12 +80,13 @@ void compile(CompilerContext* ctx, char* expr) {
     ht_set(ctx->functions, e->data.func->name, (int) e);
     int offset = 0;
     compile_expr(ctx, e, offsets, &offset);
-  } else {
+  }
+  else {
     int offset = 0;
     int total_offset = compute_offset(e);
     PUSH("%rbp");
     MOV("%rsp", "%rbp");
-    printf("sub $%d, %rsp\n", total_offset);
+    fprintf(ctx->output, "sub $%d, %%rsp\n", total_offset);
 
     compile_expr(ctx, e, offsets, &offset);
 
@@ -91,14 +98,14 @@ void compile(CompilerContext* ctx, char* expr) {
   if (ctx->debug_mode) {
     fprintf(stderr, "DEBUG: compile finished\n");
   }
-  printf("\n\n");
+  fprintf(ctx->output, "\n\n");
 }
 
 void compile_function(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* offset) {
   if (ctx->debug_mode) fprintf(stderr, "DEBUG: compile_function called\n");
 
   LispFunc* func = e->data.func;
-  printf("%s:\n", func->name);
+  fprintf(ctx->output, "%s:\n", func->name);
   PUSH("%rbp");
   MOV("%rsp", "%rbp");
 
@@ -114,7 +121,7 @@ void compile_function(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int
   POP("%rax");
   MOV("%rbp", "%rsp");
   POP("%rbp");
-  printf("ret\n");
+  fprintf(ctx->output, "ret\n");
 }
 
 void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* offset) {
@@ -125,7 +132,7 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
     case NUMBER:
       if (ctx->debug_mode)
         fprintf(stderr, "DEBUG: compiling NUMBER %f\n", e->data.number);
-      printf("push $%d\n", (int) e->data.number);
+      fprintf(ctx->output, "push $%d\n", (int) e->data.number);
       break;
 
     case SYMBOL: {
@@ -139,7 +146,7 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
       }
       int ofst = entry->val;
       assert(ofst);
-      printf("movq %d(%%rbp), %%rax\n", ofst);
+      fprintf(ctx->output, "movq %d(%%rbp), %%rax\n", ofst);
       PUSH("%rax");
       break;
     }
@@ -165,9 +172,9 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
           for (int i = list->size-1; i >= 1; i--) {
             compile_expr(ctx, list->data[i], offsets, offset);
           }
-          printf("call %s\n", op->data.symbol);
+          fprintf(ctx->output, "call %s\n", op->data.symbol);
           if (list->size > 1) {
-            printf("add $%d, %%rsp\n", (list->size - 1) * 8);
+            fprintf(ctx->output, "add $%d, %%rsp\n", (list->size - 1) * 8);
           }
           PUSH("%rax");
         }
@@ -181,16 +188,16 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
 
           compile_expr(ctx, cond, offsets, offset);
           POP("%rax");
-          printf("test %%rax, %%rax\n");
-          printf("jz else_%d\n", current_label);
+          fprintf(ctx->output, "test %%rax, %%rax\n");
+          fprintf(ctx->output, "jz else_%d\n", current_label);
 
           compile_expr(ctx, if_body, offsets, offset);
-          printf("jmp endif_%d\n", current_label);
+          fprintf(ctx->output, "jmp endif_%d\n", current_label);
 
-          printf("else_%d:\n", current_label);
+          fprintf(ctx->output, "else_%d:\n", current_label);
           compile_expr(ctx, else_body, offsets, offset);
 
-          printf("endif_%d:\n", current_label);
+          fprintf(ctx->output, "endif_%d:\n", current_label);
         }
         else if (!strcmp(op->data.symbol, "let")) {
           assert(list->size == 3);
@@ -207,30 +214,38 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
             *offset += 8;
             compile_expr(ctx, second, offsets, offset);
             POP("%rax");
-            printf("mov %%rax, -%d(%%rbp)\n", *offset);
+            fprintf(ctx->output, "mov %%rax, -%d(%%rbp)\n", *offset);
             ht_set(offsets, name, -*offset);
           }
           LispExpr* body = list->data[2];
           compile_expr(ctx, body, offsets, offset);
         }
+
         else {
           compile_expr(ctx, list->data[1], offsets, offset);
           compile_expr(ctx, list->data[2], offsets, offset);
-          POP("%rax");
           POP("%rbx");
+          POP("%rax");
 
           if (strcmp(op->data.symbol, "+") == 0) {
             ADD("%rbx", "%rax");
           } else if (strcmp(op->data.symbol, "*") == 0) {
             MUL("%rbx");
-          } else if (strcmp(op->data.symbol, "eq?") == 0) {
+          } else if (strcmp(op->data.symbol, "=") == 0) {
             MOV("$0", "%rdi");
-            printf("cmp %%rbx, %%rax\n");
-            printf("mov $1, %%rsi\n");
-            printf("cmovz %%rsi, %%rdi\n");
+            fprintf(ctx->output, "cmp %%rbx, %%rax\n");
+            fprintf(ctx->output, "mov $1, %%rsi\n");
+            fprintf(ctx->output, "cmovz %%rsi, %%rdi\n");
             MOV("%rdi", "%rax");
+          } else if (strcmp(op->data.symbol, "<") == 0) {
+            MOV("$0", "%rdi");
+            fprintf(ctx->output, "cmp %%rbx, %%rax\n");
+            fprintf(ctx->output, "mov $1, %%rsi\n");
+            fprintf(ctx->output, "cmovl %%rsi, %%rdi\n");
+            MOV("%rdi", "%rax");
+          } else if (strcmp(op->data.symbol, "-") == 0) {
+            fprintf(ctx->output, "sub %%rbx, %%rax\n");
           }
-
           PUSH("%rax");
         }
       }
@@ -239,11 +254,11 @@ void compile_expr(CompilerContext* ctx, LispExpr* e, hashtable* offsets, int* of
   }
 }
 
-int main() {
-  CompilerContext* ctx = init_compiler();
+int example() {
+  CompilerContext* ctx = init_compiler(stdout);
 
-  printf(".section .text\n");
-  printf(".global scheme_entry\n");
+  fprintf(ctx->output, ".section .text\n");
+  fprintf(ctx->output, ".global main\n");
 
   char* fact_def = "(define (factorial n) (if (eq? n 0) 1 (* n (factorial (+ n -1)))))";
   char* fib_def = "(define (fib n) (if (eq? n 0) 0 (if (eq? n 1) 1 (+ (fib (+ n -1)) (fib (+ n -2))))))";
@@ -251,11 +266,71 @@ int main() {
   compile(ctx, fact_def);
   compile(ctx, fib_def);
 
-  printf("scheme_entry:\n");
+  fprintf(ctx->output, "scheme_entry:\n");
   compile(ctx, "(+ (fib 5) (factorial 6))");
 
-  printf("ret\n\n");
+  fprintf(ctx->output, "ret\n\n");
 
   free_compiler(ctx);
   return 0;
+}
+
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <input.scm> [-o output]\n", argv[0]);
+        return 1;
+    }
+
+    FILE* input = fopen(argv[1], "r");
+    if (!input) {
+        fprintf(stderr, "Cannot open input file %s\n", argv[1]);
+        return 1;
+    }
+
+    // Read entire file into string
+    fseek(input, 0, SEEK_END);
+    long fsize = ftell(input);
+    fseek(input, 0, SEEK_SET);
+
+    char* content = malloc(fsize + 1);
+    fread(content, fsize, 1, input);
+    content[fsize] = '\0';
+    fclose(input);
+
+    FILE* output = stdout;
+    if (argc > 3 && strcmp(argv[2], "-o") == 0) {
+        output = fopen(argv[3], "w");
+        if (!output) {
+            fprintf(stderr, "Cannot open output file %s\n", argv[3]);
+            return 1;
+        }
+    }
+
+    CompilerContext* ctx = init_compiler(output);
+    fprintf(ctx->output, ".section .text\n.global scheme_entry\n");
+
+    // Split input into separate expressions and compile each one
+    char* expr = content;
+    int paren_count = 0;
+    int start = 0;
+    int i;
+
+    for (i = 0; expr[i] != '\0'; i++) {
+        if (expr[i] == '(') paren_count++;
+        else if (expr[i] == ')') {
+            paren_count--;
+            if (paren_count == 0) {
+                // Found complete expression
+                char saved = expr[i + 1];
+                expr[i + 1] = '\0';
+                compile(ctx, expr + start);
+                expr[i + 1] = saved;
+                start = i + 1;
+            }
+        }
+    }
+
+    free_compiler(ctx);
+    free(content);
+    return 0;
 }
