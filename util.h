@@ -116,6 +116,18 @@ hashtable* ht_new() {
   return ht;
 }
 
+void ht_free(hashtable* ht) {
+  for (int i = 0; i < M; i++) {
+    ht_entry* cur = ht->entries[i];
+    while (cur) {
+      ht_entry* next = cur->next;
+      free(cur);
+      cur = next;
+    }
+  }
+  free(ht->entries);
+  free(ht);
+}
 
 void ht_set(hashtable* ht, const char* key, const int val) {
   int hashed = hash(key);
